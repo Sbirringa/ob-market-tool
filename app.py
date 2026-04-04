@@ -482,7 +482,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         # ── Lista offerte ──────────────────────────────────────────────────────
         st.markdown(f'<div class="section-title">📋 Lista Offerte <span style="color:#a78bfa; font-size:1.1rem; font-weight:600;"> {len(df_tab)}</span> <span style="color:#6b6880; font-size:1rem;">risultati</span></div>', unsafe_allow_html=True)
 
-        # Ordinamento
+        # Ordinamento e paginazione
         col_ord1, col_ord2 = st.columns([2, 1])
         with col_ord1:
             ordina_per = st.selectbox(
@@ -492,28 +492,52 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
                 label_visibility="collapsed",
             )
         with col_ord2:
-            mostra_n = st.selectbox("Mostra", options=[25, 50, 100], key=f"mostra_{tab_nome}", label_visibility="collapsed")
+            per_pagina = st.selectbox(
+                "Per pagina",
+                options=[25, 50, 100, 300, "Tutte"],
+                index=1,
+                key=f"perpag_{tab_nome}",
+                label_visibility="collapsed",
+            )
 
+        # Ordinamento
         if ordina_per == "Data (più recente)":
-            df_show = df_tab.sort_values("data_pubblicazione", ascending=False).head(mostra_n)
+            df_sorted = df_tab.sort_values("data_pubblicazione", ascending=False)
         elif ordina_per == "Data (più vecchia)":
-            df_show = df_tab.sort_values("data_pubblicazione", ascending=True).head(mostra_n)
+            df_sorted = df_tab.sort_values("data_pubblicazione", ascending=True)
         else:
-            df_show = df_tab.sort_values("azienda", ascending=True).head(mostra_n)
+            df_sorted = df_tab.sort_values("azienda", ascending=True)
 
+        # Paginazione
+        totale = len(df_sorted)
+        if per_pagina == "Tutte":
+            df_show = df_sorted
+            pagina_corrente = 1
+            n_pagine = 1
+        else:
+            n_pagine = max(1, -(-totale // per_pagina))  # arrotonda su
+            if f"pag_{tab_nome}" not in st.session_state:
+                st.session_state[f"pag_{tab_nome}"] = 1
+            pagina_corrente = st.session_state[f"pag_{tab_nome}"]
+            pagina_corrente = max(1, min(pagina_corrente, n_pagine))
+            inizio = (pagina_corrente - 1) * per_pagina
+            fine   = inizio + per_pagina
+            df_show = df_sorted.iloc[inizio:fine]
+
+        # Lista offerte
         for _, row in df_show.iterrows():
-            titolo     = row.get("titolo", "N/D")
-            azienda    = row.get("azienda", "N/D")
-            citta      = row.get("città", "N/D")
-            seniority  = row.get("seniority", "unspecified")
-            modalita   = row.get("modalita_lavoro", "non specificato")
-            url        = row.get("url", "")
-            data_pub   = row.get("data_pubblicazione")
-            categoria  = row.get("categoria_ruolo", "")
+            titolo    = row.get("titolo", "N/D")
+            azienda   = row.get("azienda", "N/D")
+            citta     = row.get("città", "N/D")
+            seniority = row.get("seniority", "unspecified")
+            modalita  = row.get("modalita_lavoro", "non specificato")
+            url       = row.get("url", "")
+            data_pub  = row.get("data_pubblicazione")
+            categoria = row.get("categoria_ruolo", "")
 
-            data_str   = data_pub.strftime("%d %b %Y") if pd.notna(data_pub) else "—"
-            link_html  = f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>' if url else ""
-            badge_mod  = badge_modalita(modalita)
+            data_str  = data_pub.strftime("%d %b %Y") if pd.notna(data_pub) else "—"
+            link_html = f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>' if url else ""
+            badge_mod = badge_modalita(modalita)
 
             html = (
                 '<div class="offerta-card">'
@@ -534,6 +558,24 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
                 '</div>'
             )
             st.markdown(html, unsafe_allow_html=True)
+
+        # Navigazione pagine
+        if n_pagine > 1:
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_prec, col_info, col_succ = st.columns([1, 2, 1])
+            with col_prec:
+                if st.button("← Precedente", key=f"prec_{tab_nome}", disabled=pagina_corrente <= 1):
+                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente - 1
+                    st.rerun()
+            with col_info:
+                st.markdown(
+                    f'<div style="text-align:center; color:#6b6880; font-size:0.85rem; padding-top:0.5rem;">Pagina {pagina_corrente} di {n_pagine} · {totale} offerte totali</div>',
+                    unsafe_allow_html=True
+                )
+            with col_succ:
+                if st.button("Successiva →", key=f"succ_{tab_nome}", disabled=pagina_corrente >= n_pagine):
+                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente + 1
+                    st.rerun()
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("""
