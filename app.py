@@ -515,26 +515,25 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             link_html  = f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>' if url else ""
             badge_mod  = badge_modalita(modalita)
 
-            st.markdown(f"""
-            <div class="offerta-card">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div style="flex:1;">
-                        <div class="offerta-titolo">{titolo}</div>
-                        <div class="offerta-azienda">{azienda}</div>
-                        <div style="margin-top:0.6rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
-                            {badge_seniority(seniority)}
-                            {badge_mod}
-                            <span class="offerta-citta">📍 {citta}</span>
-                            <span style="font-size:0.75rem; color:#3d3d5c;">·</span>
-                            <span style="font-family:'JetBrains Mono'; font-size:0.72rem; color:#3d3d5c;">{data_str}</span>
-                            <span style="font-size:0.75rem; color:#3d3d5c;">·</span>
-                            <span style="font-size:0.72rem; color:#4b5563;">{categoria}</span>
-                        </div>
-                    </div>
-                    <div style="text-align:right; min-width:90px; padding-left:1rem;">{link_html}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            html = (
+                '<div class="offerta-card">'
+                '<div style="display:flex; justify-content:space-between; align-items:flex-start;">'
+                '<div style="flex:1;">'
+                f'<div class="offerta-titolo">{titolo}</div>'
+                f'<div class="offerta-azienda">{azienda}</div>'
+                '<div style="margin-top:0.6rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">'
+                f'{badge_seniority(seniority)}'
+                f'{badge_mod}'
+                f'<span class="offerta-citta">📍 {citta}</span>'
+                f'<span style="font-family:JetBrains Mono; font-size:0.72rem; color:#3d3d5c;">{data_str}</span>'
+                f'<span style="font-size:0.72rem; color:#4b5563;">{categoria}</span>'
+                '</div>'
+                '</div>'
+                f'<div style="text-align:right; min-width:90px; padding-left:1rem;">{link_html}</div>'
+                '</div>'
+                '</div>'
+            )
+            st.markdown(html, unsafe_allow_html=True)
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("""
