@@ -374,6 +374,7 @@ if dati_ok:
     # Filtro periodo
     if "data_pubblicazione" in df_f.columns:
         oggi = pd.Timestamp.now(tz="UTC")
+        df_f["data_pubblicazione"] = pd.to_datetime(df_f["data_pubblicazione"], utc=True, errors="coerce")
         if periodo == "Ultimi 7 giorni":
             df_f = df_f[df_f["data_pubblicazione"] >= oggi - pd.Timedelta(days=7)]
         elif periodo == "Ultimi 30 giorni":
