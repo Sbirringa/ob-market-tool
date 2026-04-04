@@ -343,7 +343,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, RUOLI.items()):
                     xaxis=dict(gridcolor="#1e1e2e", linecolor="#0a0a0f", tickfont=dict(color="#6b6880")),
                     yaxis=dict(autorange="reversed", gridcolor="#1e1e2e", linecolor="#1e1e2e", tickfont=dict(color="#e8e6e0", size=12)),
                 )
-                st.plotly_chart(fig_skill, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_skill, use_container_width=True, config={"displayModeBar": False}, key=f"skill_{tab_nome}")
             else:
                 st.info("Nessuna skill disponibile per questo filtro.")
 
@@ -372,7 +372,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, RUOLI.items()):
                     showarrow=False
                 )],
             )
-            st.plotly_chart(fig_sen, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_sen, use_container_width=True, config={"displayModeBar": False}, key=f"sen_{tab_nome}")
 
         col_g3, col_g4 = st.columns([1, 1.2])
 
@@ -399,7 +399,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, RUOLI.items()):
                     xaxis=dict(gridcolor="#1e1e2e", linecolor="#0a0a0f", tickfont=dict(color="#e8e6e0", size=11), tickangle=-30),
                     yaxis=dict(gridcolor="#1e1e2e", linecolor="#1e1e2e", tickfont=dict(color="#6b6880")),
                 )
-                st.plotly_chart(fig_citta, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_citta, use_container_width=True, config={"displayModeBar": False}, key=f"citta_{tab_nome}")
 
         with col_g4:
             st.markdown('<div class="section-title">📈 Trend Settimanale</div>', unsafe_allow_html=True)
@@ -426,7 +426,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, RUOLI.items()):
                     xaxis=AXIS_X,
                     yaxis=AXIS_Y,
                 )
-                st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False}, key=f"trend_{tab_nome}")
 
         # ── Lista offerte ──────────────────────────────────────────────────────
         st.markdown(f'<div class="section-title">📋 Lista Offerte <span style="color:#6b6880; font-size:1rem;">({len(df_tab)} risultati)</span></div>', unsafe_allow_html=True)
