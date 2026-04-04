@@ -131,7 +131,7 @@ def fetch_offerte(query: str, num_pages: int) -> list[dict]:
             "page": str(page),
             "num_pages": "1",
             "country": "it",
-            "date_posted": "today",
+            "date_posted": "all",
         }
         try:
             resp = requests.get(url, headers=headers, params=params, timeout=15)
