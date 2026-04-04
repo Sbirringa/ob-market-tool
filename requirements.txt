@@ -4,3 +4,4 @@ plotly
 supabase
 python-dateutil
 requests
+httpx
