@@ -245,8 +245,16 @@ html, body, [class*="css"] {
 # ── Connessione Supabase ───────────────────────────────────────────────────────
 @st.cache_resource
 def get_supabase() -> Client:
-    url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
-    key = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+    except (KeyError, FileNotFoundError):
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY")
+    
+    if not url or not key:
+        raise ValueError("SUPABASE_URL e SUPABASE_KEY non trovati nei secrets")
+    
     return create_client(url, key)
 
 @st.cache_data(ttl=3600)
