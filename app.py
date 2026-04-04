@@ -343,7 +343,7 @@ else:
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    st.markdown(f'<div class="kpi-card"><div class="kpi-value">{n_offerte}</div><div class="kpi-label">Offerte trovate</div><div class="kpi-sub">{periodo.lower()}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-card"><div class="kpi-value">{len(df_tab)}</div><div class="kpi-label">Offerte trovate</div><div class="kpi-sub">{periodo.lower()}</div></div>', unsafe_allow_html=True)
 with c2:
     st.markdown(f'<div class="kpi-card"><div class="kpi-value">{citta_top}</div><div class="kpi-label">Città più attiva</div><div class="kpi-sub">maggior concentrazione</div></div>', unsafe_allow_html=True)
 with c3:
@@ -480,7 +480,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False}, key=f"trend_{tab_nome}")
 
         # ── Lista offerte ──────────────────────────────────────────────────────
-        st.markdown(f'<div class="section-title">📋 Lista Offerte <span style="color:#6b6880; font-size:1rem;">({len(df_tab)} risultati)</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-title">📋 Lista Offerte <span style="color:#a78bfa; font-size:1.1rem; font-weight:600;"> {len(df_tab)}</span> <span style="color:#6b6880; font-size:1rem;">risultati</span></div>', unsafe_allow_html=True)
 
         # Ordinamento
         col_ord1, col_ord2 = st.columns([2, 1])
