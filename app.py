@@ -245,7 +245,11 @@ with st.sidebar:
         citta_valide = df["città"].dropna().unique().tolist()
         citta_valide = [c for c in citta_valide if c not in ["Non specificata", ""]]
         citta_options += sorted(citta_valide)
-    citta_sel = st.selectbox("Città", options=citta_options, label_visibility="collapsed")
+    citta_sel = st.text_input(
+    "Città",
+    placeholder="Es: Milano, Roma, Torino...",
+    label_visibility="collapsed",
+)
 
     # ── Skill ──────────────────────────────────────────────────────────────────
     st.markdown('<div class="filtri-sezione">🔧 Skill richieste</div>', unsafe_allow_html=True)
@@ -308,8 +312,8 @@ if dati_ok:
         df_f = df_f[df_f["modalita_lavoro"].isin(modalita_sel)]
 
     # Filtro città
-    if citta_sel != "Tutte":
-        df_f = df_f[df_f["città"] == citta_sel]
+    if citta_sel:
+    df_f = df_f[df_f["città"].str.contains(citta_sel, case=False, na=False)]
 
     # Filtro skill
     if skill_sel and not df_skill.empty:
