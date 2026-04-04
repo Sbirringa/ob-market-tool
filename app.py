@@ -313,7 +313,7 @@ if dati_ok:
 
     # Filtro città
     if citta_sel:
-    df_f = df_f[df_f["città"].str.contains(citta_sel, case=False, na=False)]
+        df_f = df_f[df_f["città"].str.contains(citta_sel, case=False, na=False)]
     
     # Filtro skill
     if skill_sel and not df_skill.empty:
