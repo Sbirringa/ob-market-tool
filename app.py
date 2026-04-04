@@ -343,7 +343,7 @@ else:
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    st.markdown(f'<div class="kpi-card"><div class="kpi-value">{len(df_tab)}</div><div class="kpi-label">Offerte trovate</div><div class="kpi-sub">{periodo.lower()}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-card"><div class="kpi-value">{n_offerte}</div><div class="kpi-label">Offerte trovate</div><div class="kpi-sub">{periodo.lower()}</div></div>', unsafe_allow_html=True)
 with c2:
     st.markdown(f'<div class="kpi-card"><div class="kpi-value">{citta_top}</div><div class="kpi-label">Città più attiva</div><div class="kpi-sub">maggior concentrazione</div></div>', unsafe_allow_html=True)
 with c3:
