@@ -482,22 +482,107 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         # ── Lista offerte ──────────────────────────────────────────────────────
         st.markdown(f'<div class="section-title">📋 Lista Offerte <span style="color:#a78bfa; font-size:1.1rem; font-weight:600;"> {len(df_tab)}</span> <span style="color:#6b6880; font-size:1rem;">risultati</span></div>', unsafe_allow_html=True)
 
-        # Ordinamento e paginazione
-        col_ord1, col_ord2 = st.columns([2, 1])
-        with col_ord1:
-            ordina_per = st.selectbox(
-                "Ordina per",
-                options=["Data (più recente)", "Data (più vecchia)", "Azienda A→Z"],
-                key=f"ord_{tab_nome}",
-                label_visibility="collapsed",
+        # Ordinamento
+        ordina_per = st.selectbox(
+            "Ordina per",
+            options=["Data (più recente)", "Data (più vecchia)", "Azienda A→Z"],
+            key=f"ord_{tab_nome}",
+            label_visibility="collapsed",
+        )
+
+        # Ordinamento
+        if ordina_per == "Data (più recente)":
+            df_sorted = df_tab.sort_values("data_pubblicazione", ascending=False)
+        elif ordina_per == "Data (più vecchia)":
+            df_sorted = df_tab.sort_values("data_pubblicazione", ascending=True)
+        else:
+            df_sorted = df_tab.sort_values("azienda", ascending=True)
+
+        # Paginazione — 30 offerte per pagina fisse
+        PER_PAGINA = 30
+        totale = len(df_sorted)
+        n_pagine = max(1, -(-totale // PER_PAGINA))
+
+        if f"pag_{tab_nome}" not in st.session_state:
+            st.session_state[f"pag_{tab_nome}"] = 1
+        pagina_corrente = st.session_state[f"pag_{tab_nome}"]
+        pagina_corrente = max(1, min(pagina_corrente, n_pagine))
+
+        inizio = (pagina_corrente - 1) * PER_PAGINA
+        fine   = inizio + PER_PAGINA
+        df_show = df_sorted.iloc[inizio:fine]
+
+        # Lista offerte
+        for _, row in df_show.iterrows():
+            titolo    = row.get("titolo", "N/D")
+            azienda   = row.get("azienda", "N/D")
+            citta     = row.get("città", "N/D")
+            seniority = row.get("seniority", "unspecified")
+            modalita  = row.get("modalita_lavoro", "non specificato")
+            url       = row.get("url", "")
+            data_pub  = row.get("data_pubblicazione")
+            categoria = row.get("categoria_ruolo", "")
+
+            data_str  = data_pub.strftime("%d %b %Y") if pd.notna(data_pub) else "—"
+            link_html = f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>' if url else ""
+            badge_mod = badge_modalita(modalita)
+
+            html = (
+                '<div class="offerta-card">'
+                '<div style="display:flex; justify-content:space-between; align-items:flex-start;">'
+                '<div style="flex:1;">'
+                f'<div class="offerta-titolo">{titolo}</div>'
+                f'<div class="offerta-azienda">{azienda}</div>'
+                '<div style="margin-top:0.6rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">'
+                f'{badge_seniority(seniority)}'
+                f'{badge_mod}'
+                f'<span class="offerta-citta">📍 {citta}</span>'
+                f'<span style="font-family:JetBrains Mono; font-size:0.72rem; color:#3d3d5c;">{data_str}</span>'
+                f'<span style="font-size:0.72rem; color:#4b5563;">{categoria}</span>'
+                '</div>'
+                '</div>'
+                f'<div style="text-align:right; min-width:90px; padding-left:1rem;">{link_html}</div>'
+                '</div>'
+                '</div>'
             )
-        with col_ord2:
-            per_pagina = st.selectbox(
-                "Per pagina",
-                options=[25, 50, 100, 300, "Tutte"],
-                index=1,
-                key=f"perpag_{tab_nome}",
-                label_visibility="collapsed",
+            st.markdown(html, unsafe_allow_html=True)
+
+        # Navigazione pagine con numeri cliccabili
+        if n_pagine > 1:
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Costruisci la riga di navigazione
+            cols = st.columns([1] + [0.5] * n_pagine + [1])
+            
+            # Freccia indietro
+            with cols[0]:
+                if st.button("←", key=f"prec_{tab_nome}", disabled=pagina_corrente <= 1):
+                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente - 1
+                    st.rerun()
+            
+            # Numeri pagina
+            for i in range(n_pagine):
+                with cols[i + 1]:
+                    num = i + 1
+                    if num == pagina_corrente:
+                        st.markdown(
+                            f'<div style="text-align:center; color:#a78bfa; font-weight:700; font-size:0.9rem; padding-top:0.4rem;">{num}</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        if st.button(str(num), key=f"pag_{tab_nome}_{num}"):
+                            st.session_state[f"pag_{tab_nome}"] = num
+                            st.rerun()
+            
+            # Freccia avanti
+            with cols[-1]:
+                if st.button("→", key=f"succ_{tab_nome}", disabled=pagina_corrente >= n_pagine):
+                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente + 1
+                    st.rerun()
+
+            st.markdown(
+                f'<div style="text-align:center; color:#6b6880; font-size:0.8rem; margin-top:0.5rem;">Pagina {pagina_corrente} di {n_pagine} · {totale} offerte totali</div>',
+                unsafe_allow_html=True
             )
 
         # Ordinamento
