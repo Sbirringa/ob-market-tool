@@ -119,7 +119,9 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 ::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 4px; }
 .footer { font-size: 0.75rem; color: #3d3d5c; text-align: center; padding: 2rem 0 1rem 0; letter-spacing: 0.05em; }
 
-[data-testid="stSidebarCollapsedControl"]::after {
+[data-testid="stSidebarCollapsedControl"]::after,
+[data-testid="collapsedControl"]::after,
+button[kind="header"]::after {
     content: 'Menù';
     display: block;
     font-size: 0.55rem;
