@@ -5,7 +5,6 @@ Design: Dark editorial, tipografia raffinata, grafici Plotly custom
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 from supabase import create_client, Client
 import os
@@ -24,7 +23,6 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-
 .stApp { background: #0a0a0f; color: #e8e6e0; }
 
 [data-testid="stSidebar"] {
@@ -164,7 +162,7 @@ def carica_dati():
         df["data_pubblicazione"] = pd.to_datetime(df["data_pubblicazione"], utc=True, errors="coerce")
     return df, df_skill
 
-# ── Tema Plotly base (SENZA xaxis/yaxis per evitare conflitti) ─────────────────
+# ── Tema Plotly base ───────────────────────────────────────────────────────────
 PLOTLY_BASE = dict(
     paper_bgcolor="#0a0a0f",
     plot_bgcolor="#0a0a0f",
@@ -210,9 +208,18 @@ with st.sidebar:
     st.markdown("**🎯 Filtri**")
 
     seniority_options = ["junior", "mid", "senior", "unspecified"]
-    seniority_sel = st.multiselect("Livello seniority", options=seniority_options, default=["junior", "unspecified"])
+    seniority_sel = st.multiselect(
+        "Livello seniority",
+        options=seniority_options,
+        default=[],
+        placeholder="Tutti i livelli"
+    )
 
-    periodo = st.selectbox("Periodo", options=["Ultimi 7 giorni", "Ultimi 30 giorni", "Ultimi 90 giorni", "Tutto"], index=2)
+    periodo = st.selectbox(
+        "Periodo",
+        options=["Ultimi 7 giorni", "Ultimi 30 giorni", "Ultimi 90 giorni", "Tutto"],
+        index=3
+    )
 
     citta_options = ["Tutte"]
     if dati_ok and "città" in df.columns:
@@ -241,9 +248,11 @@ st.markdown("""
 if dati_ok:
     df_f = df.copy()
 
+    # Filtro seniority — se vuoto mostra tutto
     if seniority_sel:
         df_f = df_f[df_f["seniority"].isin(seniority_sel)]
 
+    # Filtro periodo
     if "data_pubblicazione" in df_f.columns:
         oggi = pd.Timestamp.now(tz="UTC")
         df_f["data_pubblicazione"] = pd.to_datetime(df_f["data_pubblicazione"], utc=True, errors="coerce")
@@ -254,9 +263,11 @@ if dati_ok:
         elif periodo == "Ultimi 90 giorni":
             df_f = df_f[df_f["data_pubblicazione"] >= oggi - pd.Timedelta(days=90)]
 
+    # Filtro città
     if citta_sel != "Tutte":
         df_f = df_f[df_f["città"] == citta_sel]
 
+    # Filtro skill
     if skill_sel and not df_skill.empty:
         ids_con_skill = df_skill[df_skill["skill"].isin(skill_sel)]["offerta_id"].unique()
         df_f = df_f[df_f["id"].isin(ids_con_skill)]
