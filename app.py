@@ -21,15 +21,12 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 .stApp { background: #0a0a0f; color: #e8e6e0; }
-
 [data-testid="stSidebar"] {
     background: #0f0f18 !important;
     border-right: 1px solid #1e1e2e;
 }
-
 .main-header {
     font-family: 'DM Serif Display', serif;
     font-size: 3.2rem;
@@ -39,7 +36,6 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     line-height: 1.1;
     margin-bottom: 0.2rem;
 }
-
 .main-subtitle {
     font-family: 'DM Sans', sans-serif;
     font-size: 1rem;
@@ -49,7 +45,6 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     text-transform: uppercase;
     margin-bottom: 2rem;
 }
-
 .kpi-card {
     background: linear-gradient(135deg, #13131f 0%, #1a1a2e 100%);
     border: 1px solid #1e1e30;
@@ -58,7 +53,6 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     position: relative;
     overflow: hidden;
 }
-
 .kpi-card::before {
     content: '';
     position: absolute;
@@ -66,7 +60,6 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     height: 2px;
     background: linear-gradient(90deg, #6c63ff, #a78bfa, #818cf8);
 }
-
 .kpi-value {
     font-family: 'DM Serif Display', serif;
     font-size: 2.6rem;
@@ -74,7 +67,6 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     line-height: 1;
     margin-bottom: 0.4rem;
 }
-
 .kpi-label {
     font-size: 0.78rem;
     color: #6b6880;
@@ -82,14 +74,12 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     letter-spacing: 0.1em;
     font-weight: 500;
 }
-
 .kpi-sub {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.82rem;
     color: #a78bfa;
     margin-top: 0.5rem;
 }
-
 .badge {
     display: inline-block;
     padding: 0.2rem 0.65rem;
@@ -99,12 +89,10 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     letter-spacing: 0.05em;
     text-transform: uppercase;
 }
-
 .badge-junior     { background: #1a2e1a; color: #4ade80; border: 1px solid #166534; }
 .badge-mid        { background: #1e2a3a; color: #60a5fa; border: 1px solid #1e3a5f; }
 .badge-senior     { background: #2d1e3a; color: #c084fc; border: 1px solid #581c87; }
 .badge-unspecified{ background: #1e1e2e; color: #94a3b8; border: 1px solid #334155; }
-
 .section-title {
     font-family: 'DM Serif Display', serif;
     font-size: 1.5rem;
@@ -113,7 +101,6 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     padding-bottom: 0.5rem;
     border-bottom: 1px solid #1e1e2e;
 }
-
 .offerta-card {
     background: #13131f;
     border: 1px solid #1e1e2e;
@@ -121,20 +108,26 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     padding: 1.2rem 1.4rem;
     margin-bottom: 0.8rem;
 }
-
 .offerta-titolo  { font-size: 1rem; font-weight: 600; color: #f0ede6; margin-bottom: 0.3rem; }
 .offerta-azienda { font-size: 0.85rem; color: #6b6880; }
 .offerta-citta   { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #a78bfa; }
-
 .stTabs [data-baseweb="tab-list"] { background: #0f0f18; border-bottom: 1px solid #1e1e2e; gap: 0; }
 .stTabs [data-baseweb="tab"] { color: #6b6880; font-size: 0.88rem; font-weight: 500; padding: 0.75rem 1.2rem; border-radius: 0; }
 .stTabs [aria-selected="true"] { color: #f0ede6 !important; border-bottom: 2px solid #a78bfa !important; background: transparent !important; }
-
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #0a0a0f; }
 ::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 4px; }
-
 .footer { font-size: 0.75rem; color: #3d3d5c; text-align: center; padding: 2rem 0 1rem 0; letter-spacing: 0.05em; }
+
+[data-testid="stSidebarCollapsedControl"]::after {
+    content: 'Menù';
+    display: block;
+    font-size: 0.55rem;
+    color: #6b6880;
+    text-align: center;
+    letter-spacing: 0.05em;
+    margin-top: 2px;
+}
 </style>
 """, unsafe_allow_html=True)
 
