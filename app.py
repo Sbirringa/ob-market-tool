@@ -1,7 +1,6 @@
 """
 IT Job Market Intelligence — Dashboard Streamlit v2.0
 Design: Dark editorial 2026
-Nuovi filtri: modalità lavoro, periodo esteso, seniority estesa, nuovi ruoli
 """
 
 import streamlit as st
@@ -56,14 +55,12 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 .kpi-label { font-size: 0.78rem; color: #6b6880; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; }
 .kpi-sub   { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: #a78bfa; margin-top: 0.5rem; }
 
-/* Badge seniority */
 .badge { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 20px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 .badge-junior      { background: #1a2e1a; color: #4ade80; border: 1px solid #166534; }
 .badge-mid         { background: #1e2a3a; color: #60a5fa; border: 1px solid #1e3a5f; }
 .badge-senior      { background: #2d1e3a; color: #c084fc; border: 1px solid #581c87; }
 .badge-unspecified { background: #1e1e2e; color: #94a3b8; border: 1px solid #334155; }
 
-/* Badge modalità lavoro */
 .badge-remoto  { background: #1a2e26; color: #34d399; border: 1px solid #065f46; }
 .badge-ibrido  { background: #2a2010; color: #fb923c; border: 1px solid #92400e; }
 .badge-sede    { background: #1e1e2e; color: #94a3b8; border: 1px solid #334155; }
@@ -119,7 +116,6 @@ def carica_dati():
     df_skill = pd.DataFrame(skill_raw)
     if not df.empty and "data_pubblicazione" in df.columns:
         df["data_pubblicazione"] = pd.to_datetime(df["data_pubblicazione"], utc=True, errors="coerce")
-    # Gestisci colonna modalita_lavoro (potrebbe non esistere in DB vecchi)
     if not df.empty and "modalita_lavoro" not in df.columns:
         df["modalita_lavoro"] = "non specificato"
     return df, df_skill
@@ -143,7 +139,6 @@ MODALITA_COLORS = {
     "sede": "#94a3b8", "non specificato": "#374151",
 }
 
-# Label leggibili per seniority
 SENIORITY_LABELS = {
     "junior":      "Junior / Stage / Neolaureato",
     "mid":         "Middle / Con esperienza",
@@ -158,7 +153,6 @@ MODALITA_LABELS = {
     "non specificato": "❓ Non specificato",
 }
 
-# Tutti i ruoli disponibili (aggiornati con ETL v2)
 RUOLI = {
     "🌐 Tutte":               None,
     "📊 Data Analyst":        "Data Analyst",
@@ -174,6 +168,9 @@ RUOLI = {
     "⚙️ Operations Analyst":  "Operations Analyst",
 }
 
+PER_PAGINA = 30
+
+# ── Helper: badge HTML ─────────────────────────────────────────────────────────
 def badge_seniority(seniority: str) -> str:
     s = str(seniority).lower()
     cls = f"badge-{s}" if s in ["junior", "mid", "senior", "unspecified"] else "badge-unspecified"
@@ -182,10 +179,9 @@ def badge_seniority(seniority: str) -> str:
 
 def badge_modalita(modalita: str) -> str:
     m = str(modalita).lower()
-    icons = {"remoto": "🌐", "ibrido": "🔀", "sede": "🏢", "non specificato": ""}
-    if m == "remoto":   return f'<span class="badge badge-remoto">🌐 remoto</span>'
-    if m == "ibrido":   return f'<span class="badge badge-ibrido">🔀 ibrido</span>'
-    if m == "sede":     return f'<span class="badge badge-sede">🏢 sede</span>'
+    if m == "remoto":          return '<span class="badge badge-remoto">🌐 remoto</span>'
+    if m == "ibrido":          return '<span class="badge badge-ibrido">🔀 ibrido</span>'
+    if m == "sede":            return '<span class="badge badge-sede">🏢 sede</span>'
     return ""
 
 # ── Caricamento dati ───────────────────────────────────────────────────────────
@@ -207,7 +203,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Periodo ────────────────────────────────────────────────────────────────
+    # Periodo
     st.markdown('<div class="filtri-sezione">📅 Periodo</div>', unsafe_allow_html=True)
     periodo = st.selectbox(
         "Periodo pubblicazione",
@@ -216,7 +212,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # ── Seniority ──────────────────────────────────────────────────────────────
+    # Seniority
     st.markdown('<div class="filtri-sezione">🎯 Livello esperienza</div>', unsafe_allow_html=True)
     seniority_sel = st.multiselect(
         "Livello",
@@ -227,7 +223,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # ── Modalità lavoro ────────────────────────────────────────────────────────
+    # Modalità lavoro
     st.markdown('<div class="filtri-sezione">🏠 Modalità di lavoro</div>', unsafe_allow_html=True)
     modalita_sel = st.multiselect(
         "Modalità",
@@ -238,20 +234,15 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # ── Città ──────────────────────────────────────────────────────────────────
+    # Città (text input — filtro per sottostringa)
     st.markdown('<div class="filtri-sezione">📍 Città</div>', unsafe_allow_html=True)
-    citta_options = ["Tutte"]
-    if dati_ok and "città" in df.columns:
-        citta_valide = df["città"].dropna().unique().tolist()
-        citta_valide = [c for c in citta_valide if c not in ["Non specificata", ""]]
-        citta_options += sorted(citta_valide)
     citta_sel = st.text_input(
-    "Città",
-    placeholder="Es: Milano, Roma, Torino...",
-    label_visibility="collapsed",
-)
+        "Città",
+        placeholder="Es: Milano, Roma, Torino...",
+        label_visibility="collapsed",
+    )
 
-    # ── Skill ──────────────────────────────────────────────────────────────────
+    # Skill
     st.markdown('<div class="filtri-sezione">🔧 Skill richieste</div>', unsafe_allow_html=True)
     skill_options = []
     if not df_skill.empty and "skill" in df_skill.columns:
@@ -270,14 +261,24 @@ with st.sidebar:
 
     # Contatore filtri attivi
     n_filtri = sum([
-        bool(seniority_sel), bool(modalita_sel),
-        citta_sel != "Tutte", bool(skill_sel),
-        periodo != "Tutto"
+        bool(seniority_sel),
+        bool(modalita_sel),
+        bool(citta_sel.strip()),
+        bool(skill_sel),
+        periodo != "Tutto",
     ])
     if n_filtri > 0:
-        st.markdown(f'<div style="font-size:0.75rem; color:#a78bfa; text-align:center;">{n_filtri} filtro{"i" if n_filtri > 1 else ""} attivo{"i" if n_filtri > 1 else ""}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-size:0.75rem; color:#a78bfa; text-align:center;">'
+            f'{n_filtri} filtro{"i" if n_filtri > 1 else ""} attivo{"i" if n_filtri > 1 else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-    st.markdown('<div class="footer">Dati aggiornati ogni mattina<br>via GitHub Actions + JSearch API</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="footer">Dati aggiornati ogni mattina<br>via GitHub Actions + JSearch API</div>',
+        unsafe_allow_html=True,
+    )
 
 # ── HEADER ─────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -311,12 +312,12 @@ if dati_ok:
     if modalita_sel and "modalita_lavoro" in df_f.columns:
         df_f = df_f[df_f["modalita_lavoro"].isin(modalita_sel)]
 
-    # Filtro città
-    if citta_sel:
-        df_f = df_f[df_f["città"].str.contains(citta_sel, case=False, na=False)]
-    
+    # Filtro città (sottostringa, case-insensitive)
+    if citta_sel.strip() and "città" in df_f.columns:
+        df_f = df_f[df_f["città"].str.contains(citta_sel.strip(), case=False, na=False)]
+
     # Filtro skill
-    if skill_sel and not df_skill.empty:
+    if skill_sel and not df_skill.empty and "offerta_id" in df_skill.columns:
         ids_con_skill = df_skill[df_skill["skill"].isin(skill_sel)]["offerta_id"].unique()
         df_f = df_f[df_f["id"].isin(ids_con_skill)]
 
@@ -330,16 +331,17 @@ else:
     skill_correnti = pd.DataFrame()
 
 # ── KPI ────────────────────────────────────────────────────────────────────────
-n_offerte  = len(df_f)
-citta_top  = df_f["città"].value_counts().index[0] if n_offerte > 0 and "città" in df_f.columns else "—"
-skill_top  = skill_correnti["skill"].value_counts().index[0] if not skill_correnti.empty else "—"
-
-# Modalità più comune
+n_offerte = len(df_f)
+citta_top = (
+    df_f["città"].value_counts().index[0]
+    if n_offerte > 0 and "città" in df_f.columns and not df_f["città"].dropna().empty
+    else "—"
+)
+skill_top = skill_correnti["skill"].value_counts().index[0] if not skill_correnti.empty else "—"
+pct_remoto = 0
 if n_offerte > 0 and "modalita_lavoro" in df_f.columns:
-    mod_counts = df_f["modalita_lavoro"].value_counts()
-    pct_remoto = round(len(df_f[df_f["modalita_lavoro"] == "remoto"]) / n_offerte * 100)
-else:
-    pct_remoto = 0
+    n_flessibile = len(df_f[df_f["modalita_lavoro"].isin(["remoto", "ibrido"])])
+    pct_remoto = round(n_flessibile / n_offerte * 100)
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -354,7 +356,6 @@ with c4:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── TABS per ruolo ─────────────────────────────────────────────────────────────
-# Mostra solo tab con almeno 1 offerta (+ sempre "Tutte")
 tab_attive = {}
 for nome, ruolo in RUOLI.items():
     if ruolo is None:
@@ -398,8 +399,13 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
                 top_skill.columns = ["skill", "count"]
                 fig_skill = go.Figure(go.Bar(
                     x=top_skill["count"], y=top_skill["skill"], orientation="h",
-                    marker=dict(color=top_skill["count"], colorscale=[[0, "#2d1e3a"], [0.5, "#6d28d9"], [1, "#a78bfa"]], line=dict(color="rgba(0,0,0,0)", width=0)),
-                    text=top_skill["count"], textposition="outside", textfont=dict(color="#6b6880", size=11),
+                    marker=dict(
+                        color=top_skill["count"],
+                        colorscale=[[0, "#2d1e3a"], [0.5, "#6d28d9"], [1, "#a78bfa"]],
+                        line=dict(color="rgba(0,0,0,0)", width=0),
+                    ),
+                    text=top_skill["count"], textposition="outside",
+                    textfont=dict(color="#6b6880", size=11),
                 ))
                 fig_skill.update_layout(
                     **PLOTLY_BASE, height=380, showlegend=False,
@@ -412,20 +418,24 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
 
         with col_g2:
             st.markdown('<div class="section-title">🎯 Distribuzione Seniority</div>', unsafe_allow_html=True)
-            sen_count = df_tab["seniority"].value_counts().reset_index()
-            sen_count.columns = ["seniority", "count"]
-            colors_sen = [SENIORITY_COLORS.get(s, "#94a3b8") for s in sen_count["seniority"]]
-            fig_sen = go.Figure(go.Pie(
-                labels=[SENIORITY_LABELS.get(s, s) for s in sen_count["seniority"]],
-                values=sen_count["count"], hole=0.65,
-                marker=dict(colors=colors_sen, line=dict(color="#0a0a0f", width=3)),
-                textfont=dict(color="#e8e6e0", size=11), textinfo="label+percent",
-            ))
-            fig_sen.update_layout(
-                **PLOTLY_BASE, height=380, showlegend=False,
-                annotations=[dict(text=f"<b>{len(df_tab)}</b><br><span style='font-size:10px'>offerte</span>", x=0.5, y=0.5, font_size=20, font_color="#f0ede6", showarrow=False)],
-            )
-            st.plotly_chart(fig_sen, use_container_width=True, config={"displayModeBar": False}, key=f"sen_{tab_nome}")
+            if "seniority" in df_tab.columns:
+                sen_count = df_tab["seniority"].value_counts().reset_index()
+                sen_count.columns = ["seniority", "count"]
+                colors_sen = [SENIORITY_COLORS.get(s, "#94a3b8") for s in sen_count["seniority"]]
+                fig_sen = go.Figure(go.Pie(
+                    labels=[SENIORITY_LABELS.get(s, s) for s in sen_count["seniority"]],
+                    values=sen_count["count"], hole=0.65,
+                    marker=dict(colors=colors_sen, line=dict(color="#0a0a0f", width=3)),
+                    textfont=dict(color="#e8e6e0", size=11), textinfo="label+percent",
+                ))
+                fig_sen.update_layout(
+                    **PLOTLY_BASE, height=380, showlegend=False,
+                    annotations=[dict(
+                        text=f"<b>{len(df_tab)}</b><br><span style='font-size:10px'>offerte</span>",
+                        x=0.5, y=0.5, font_size=20, font_color="#f0ede6", showarrow=False,
+                    )],
+                )
+                st.plotly_chart(fig_sen, use_container_width=True, config={"displayModeBar": False}, key=f"sen_{tab_nome}")
 
         # ── Riga 2: Città + Modalità lavoro ───────────────────────────────────
         col_g3, col_g4 = st.columns([1, 1])
@@ -433,12 +443,16 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         with col_g3:
             st.markdown('<div class="section-title">📍 Offerte per Città</div>', unsafe_allow_html=True)
             if "città" in df_tab.columns:
-                citta_count = df_tab[df_tab["città"] != "Non specificata"]["città"].value_counts().head(10).reset_index()
+                citta_count = (
+                    df_tab[df_tab["città"] != "Non specificata"]["città"]
+                    .value_counts().head(10).reset_index()
+                )
                 citta_count.columns = ["città", "count"]
                 fig_citta = go.Figure(go.Bar(
                     x=citta_count["città"], y=citta_count["count"],
                     marker=dict(color=citta_count["count"], colorscale=[[0, "#1e2a3a"], [1, "#60a5fa"]]),
-                    text=citta_count["count"], textposition="outside", textfont=dict(color="#6b6880", size=11),
+                    text=citta_count["count"], textposition="outside",
+                    textfont=dict(color="#6b6880", size=11),
                 ))
                 fig_citta.update_layout(
                     **PLOTLY_BASE, height=320, showlegend=False,
@@ -480,7 +494,12 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False}, key=f"trend_{tab_nome}")
 
         # ── Lista offerte ──────────────────────────────────────────────────────
-        st.markdown(f'<div class="section-title">📋 Lista Offerte <span style="color:#a78bfa; font-size:1.1rem; font-weight:600;"> {len(df_tab)}</span> <span style="color:#6b6880; font-size:1rem;">risultati</span></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="section-title">📋 Lista Offerte '
+            f'<span style="color:#a78bfa; font-size:1.1rem; font-weight:600;"> {len(df_tab)}</span> '
+            f'<span style="color:#6b6880; font-size:1rem;">risultati</span></div>',
+            unsafe_allow_html=True,
+        )
 
         # Ordinamento
         ordina_per = st.selectbox(
@@ -490,7 +509,6 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             label_visibility="collapsed",
         )
 
-        # Ordinamento
         if ordina_per == "Data (più recente)":
             df_sorted = df_tab.sort_values("data_pubblicazione", ascending=False)
         elif ordina_per == "Data (più vecchia)":
@@ -498,21 +516,20 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         else:
             df_sorted = df_tab.sort_values("azienda", ascending=True)
 
-        # Paginazione — 30 offerte per pagina fisse
-        PER_PAGINA = 30
-        totale = len(df_sorted)
+        # Paginazione
+        totale   = len(df_sorted)
         n_pagine = max(1, -(-totale // PER_PAGINA))
 
-        if f"pag_{tab_nome}" not in st.session_state:
-            st.session_state[f"pag_{tab_nome}"] = 1
-        pagina_corrente = st.session_state[f"pag_{tab_nome}"]
-        pagina_corrente = max(1, min(pagina_corrente, n_pagine))
+        pag_key = f"pag_{tab_nome}"
+        if pag_key not in st.session_state:
+            st.session_state[pag_key] = 1
+        pagina_corrente = max(1, min(st.session_state[pag_key], n_pagine))
 
-        inizio = (pagina_corrente - 1) * PER_PAGINA
-        fine   = inizio + PER_PAGINA
+        inizio  = (pagina_corrente - 1) * PER_PAGINA
+        fine    = inizio + PER_PAGINA
         df_show = df_sorted.iloc[inizio:fine]
 
-        # Lista offerte
+        # Rendering offerte
         for _, row in df_show.iterrows():
             titolo    = row.get("titolo", "N/D")
             azienda   = row.get("azienda", "N/D")
@@ -524,7 +541,10 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             categoria = row.get("categoria_ruolo", "")
 
             data_str  = data_pub.strftime("%d %b %Y") if pd.notna(data_pub) else "—"
-            link_html = f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>' if url else ""
+            link_html = (
+                f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>'
+                if url else ""
+            )
             badge_mod = badge_modalita(modalita)
 
             html = (
@@ -550,117 +570,36 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         # Navigazione pagine con numeri cliccabili
         if n_pagine > 1:
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Costruisci la riga di navigazione
             cols = st.columns([1] + [0.5] * n_pagine + [1])
-            
-            # Freccia indietro
+
             with cols[0]:
                 if st.button("←", key=f"prec_{tab_nome}", disabled=pagina_corrente <= 1):
-                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente - 1
+                    st.session_state[pag_key] = pagina_corrente - 1
                     st.rerun()
-            
-            # Numeri pagina
+
             for i in range(n_pagine):
                 with cols[i + 1]:
                     num = i + 1
                     if num == pagina_corrente:
                         st.markdown(
                             f'<div style="text-align:center; color:#a78bfa; font-weight:700; font-size:0.9rem; padding-top:0.4rem;">{num}</div>',
-                            unsafe_allow_html=True
+                            unsafe_allow_html=True,
                         )
                     else:
                         if st.button(str(num), key=f"pag_{tab_nome}_{num}"):
-                            st.session_state[f"pag_{tab_nome}"] = num
+                            st.session_state[pag_key] = num
                             st.rerun()
-            
-            # Freccia avanti
+
             with cols[-1]:
                 if st.button("→", key=f"succ_{tab_nome}", disabled=pagina_corrente >= n_pagine):
-                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente + 1
+                    st.session_state[pag_key] = pagina_corrente + 1
                     st.rerun()
 
             st.markdown(
-                f'<div style="text-align:center; color:#6b6880; font-size:0.8rem; margin-top:0.5rem;">Pagina {pagina_corrente} di {n_pagine} · {totale} offerte totali</div>',
-                unsafe_allow_html=True
+                f'<div style="text-align:center; color:#6b6880; font-size:0.8rem; margin-top:0.5rem;">'
+                f'Pagina {pagina_corrente} di {n_pagine} · {totale} offerte totali</div>',
+                unsafe_allow_html=True,
             )
-
-        # Ordinamento
-        if ordina_per == "Data (più recente)":
-            df_sorted = df_tab.sort_values("data_pubblicazione", ascending=False)
-        elif ordina_per == "Data (più vecchia)":
-            df_sorted = df_tab.sort_values("data_pubblicazione", ascending=True)
-        else:
-            df_sorted = df_tab.sort_values("azienda", ascending=True)
-
-        # Paginazione
-        totale = len(df_sorted)
-        if per_pagina == "Tutte":
-            df_show = df_sorted
-            pagina_corrente = 1
-            n_pagine = 1
-        else:
-            n_pagine = max(1, -(-totale // per_pagina))  # arrotonda su
-            if f"pag_{tab_nome}" not in st.session_state:
-                st.session_state[f"pag_{tab_nome}"] = 1
-            pagina_corrente = st.session_state[f"pag_{tab_nome}"]
-            pagina_corrente = max(1, min(pagina_corrente, n_pagine))
-            inizio = (pagina_corrente - 1) * per_pagina
-            fine   = inizio + per_pagina
-            df_show = df_sorted.iloc[inizio:fine]
-
-        # Lista offerte
-        for _, row in df_show.iterrows():
-            titolo    = row.get("titolo", "N/D")
-            azienda   = row.get("azienda", "N/D")
-            citta     = row.get("città", "N/D")
-            seniority = row.get("seniority", "unspecified")
-            modalita  = row.get("modalita_lavoro", "non specificato")
-            url       = row.get("url", "")
-            data_pub  = row.get("data_pubblicazione")
-            categoria = row.get("categoria_ruolo", "")
-
-            data_str  = data_pub.strftime("%d %b %Y") if pd.notna(data_pub) else "—"
-            link_html = f'<a href="{url}" target="_blank" style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">→ Candidati</a>' if url else ""
-            badge_mod = badge_modalita(modalita)
-
-            html = (
-                '<div class="offerta-card">'
-                '<div style="display:flex; justify-content:space-between; align-items:flex-start;">'
-                '<div style="flex:1;">'
-                f'<div class="offerta-titolo">{titolo}</div>'
-                f'<div class="offerta-azienda">{azienda}</div>'
-                '<div style="margin-top:0.6rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">'
-                f'{badge_seniority(seniority)}'
-                f'{badge_mod}'
-                f'<span class="offerta-citta">📍 {citta}</span>'
-                f'<span style="font-family:JetBrains Mono; font-size:0.72rem; color:#3d3d5c;">{data_str}</span>'
-                f'<span style="font-size:0.72rem; color:#4b5563;">{categoria}</span>'
-                '</div>'
-                '</div>'
-                f'<div style="text-align:right; min-width:90px; padding-left:1rem;">{link_html}</div>'
-                '</div>'
-                '</div>'
-            )
-            st.markdown(html, unsafe_allow_html=True)
-
-        # Navigazione pagine
-        if n_pagine > 1:
-            st.markdown("<br>", unsafe_allow_html=True)
-            col_prec, col_info, col_succ = st.columns([1, 2, 1])
-            with col_prec:
-                if st.button("← Precedente", key=f"prec_{tab_nome}", disabled=pagina_corrente <= 1):
-                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente - 1
-                    st.rerun()
-            with col_info:
-                st.markdown(
-                    f'<div style="text-align:center; color:#6b6880; font-size:0.85rem; padding-top:0.5rem;">Pagina {pagina_corrente} di {n_pagine} · {totale} offerte totali</div>',
-                    unsafe_allow_html=True
-                )
-            with col_succ:
-                if st.button("Successiva →", key=f"succ_{tab_nome}", disabled=pagina_corrente >= n_pagine):
-                    st.session_state[f"pag_{tab_nome}"] = pagina_corrente + 1
-                    st.rerun()
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("""
