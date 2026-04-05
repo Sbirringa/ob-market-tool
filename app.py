@@ -472,7 +472,7 @@ if dati_ok:
                     citta_sel + citta_testo, skill_sel, skill_mode)
     if st.session_state.get("_filtri_hash") != h:
         for k in list(st.session_state.keys()):
-            if k.startswith("pag_"):
+            if k.startswith("_pg_"):
                 st.session_state[k] = 1
         st.session_state["_filtri_hash"] = h
 
@@ -689,7 +689,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         # Paginazione
         totale          = len(df_sorted)
         n_pagine        = max(1, -(-totale // PER_PAGINA))
-        pag_key         = f"pag_{tab_nome}"
+        pag_key         = f"_pg_{tab_nome}"
         if pag_key not in st.session_state:
             st.session_state[pag_key] = 1
         pagina_corrente = max(1, min(st.session_state[pag_key], n_pagine))
