@@ -425,7 +425,7 @@ with st.sidebar:
 st.markdown("""
 <div class="menu-hint">← Apri il menù laterale per filtrare i risultati</div>
 <div class="main-header">Mercato IT Italiano</div>
-<div class="main-subtitle">Intelligence sulle offerte di lavoro · Aggiornamento quotidiano</div>
+<div class="main-subtitle">Offerte di lavoro · Aggiornamento quotidiano</div>
 """, unsafe_allow_html=True)
 
 # ── FILTRAGGIO DATI ────────────────────────────────────────────────────────────
