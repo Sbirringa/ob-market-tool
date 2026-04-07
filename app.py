@@ -343,27 +343,14 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # Città — dropdown con tutte le città reali + ricerca libera come fallback
+    # Città — solo testo libero
     st.markdown('<div class="filtri-sezione">📍 Città</div>', unsafe_allow_html=True)
-    citta_options = ["Tutte"]
-    if dati_ok and col_safe(df, "città"):
-        citta_valide = sorted([
-            c for c in df["città"].dropna().unique()
-            if c not in CITTA_NON_VALIDE
-        ])
-        citta_options += citta_valide
-    citta_sel = st.selectbox(
-        "Seleziona città",
-        options=citta_options,
-        index=0,
-        label_visibility="collapsed",
-    )
     citta_testo = st.text_input(
-        "Oppure cerca (testo libero):",
-        placeholder="Es: Bergamo, Padova...",
+        "Cerca città:",
+        placeholder="Es: Milano, Roma, Torino...",
         label_visibility="visible",
-        help="Usato solo se 'Tutte' è selezionato sopra.",
     )
+    citta_sel = "Tutte"  # sempre Tutte, il filtro è solo il testo
 
     # Skill + AND/OR
     st.markdown('<div class="filtri-sezione">🔧 Skill richieste</div>', unsafe_allow_html=True)
@@ -444,9 +431,7 @@ if dati_ok:
         df_f = df_f[df_f["modalita_lavoro"].isin(modalita_sel)]
 
     # Città: selectbox ha priorità; text fallback se selectbox = "Tutte"
-    if citta_sel != "Tutte" and col_safe(df_f, "città"):
-        df_f = df_f[df_f["città"].str.contains(citta_sel, case=False, na=False)]
-    elif citta_testo.strip() and col_safe(df_f, "città"):
+    if citta_testo.strip() and col_safe(df_f, "città"):
         df_f = df_f[df_f["città"].str.contains(citta_testo.strip(), case=False, na=False)]
 
     # Skill (AND / OR)
