@@ -292,6 +292,9 @@ def filtri_hash(periodo, seniority_sel, modalita_sel, citta_key, skill_sel, skil
 try:
     df, df_skill = carica_dati()
     dati_ok = not df.empty
+    # DEBUG TEMPORANEO — rimuovi dopo
+    if dati_ok and "città" in df.columns:
+        st.write("🔍 DEBUG CITTÀ:", df["città"].value_counts().head(60).to_dict())
 except Exception as e:
     st.error(f"Errore connessione Supabase: {e}")
     dati_ok = False
