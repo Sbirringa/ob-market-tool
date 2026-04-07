@@ -1,18 +1,11 @@
 """
-IT Job Market Intelligence — Dashboard Streamlit v3.1
+IT Job Market Intelligence — Dashboard Streamlit v3.2
 Design: Dark editorial 2026
 
-Fix v3.1:
-  - BUG FIX: citta_sel rimosso, filtro città unificato su citta_testo (era ridondante e causava "Nessuna offerta")
-  - BUG FIX: tab_attive ora controlla col_safe su df (intero dataset), non df_f (filtrato) → le tab non spariscono
-  - BUG FIX: filtri_hash ora riceve citta_testo direttamente, non concatenazione ambigua
-  - MIGLIORAMENTO: Salary range parsing (se colonna "stipendio" presente)
-  - MIGLIORAMENTO: Filtro "Solo con URL" (mostra solo offerte con link candidatura)
-  - MIGLIORAMENTO: Contatore offerte per tab nel tab label
-  - MIGLIORAMENTO: Esportazione CSV del risultato filtrato
-  - MIGLIORAMENTO: Ricerca testuale nel titolo/azienda
-  - MIGLIORAMENTO: Grafici skill con colori per categoria
-  - MIGLIORAMENTO: Top 10 skill globali nel KPI section
+Fix v3.2 rispetto a v3.1:
+  - BUG FIX: filtro periodo ora usa .notna() prima del confronto date
+    (prima: NaT passava il filtro >= e "Ultime 24 ore" restituiva tutti i 695 risultati)
+  - MIGLIORAMENTO: data pubblicazione visibile nel card di ogni offerta
 """
 
 import streamlit as st
@@ -92,6 +85,7 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 .offerta-titolo  { font-size: 1rem; font-weight: 600; color: #f0ede6; margin-bottom: 0.3rem; }
 .offerta-azienda { font-size: 0.85rem; color: #6b6880; }
 .offerta-citta   { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #a78bfa; }
+.offerta-data    { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #4b5563; }
 
 .hint-pill {
     display: inline-block; font-size: 0.68rem; color: #4b5563;
@@ -290,6 +284,25 @@ def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
     df[cols_export].to_csv(buf, index=False, encoding="utf-8-sig")
     return buf.getvalue()
 
+def format_data_pub(data_pub) -> str:
+    """Formatta la data di pubblicazione in modo leggibile e relativo."""
+    if data_pub is None or pd.isna(data_pub):
+        return None
+    oggi = pd.Timestamp.now(tz="UTC")
+    delta = oggi - data_pub
+    giorni = delta.days
+    if giorni == 0:
+        return "oggi"
+    elif giorni == 1:
+        return "ieri"
+    elif giorni < 7:
+        return f"{giorni} giorni fa"
+    elif giorni < 30:
+        settimane = giorni // 7
+        return f"{settimane} {'settimana' if settimane == 1 else 'settimane'} fa"
+    else:
+        return data_pub.strftime("%d %b %Y")
+
 # ── Caricamento dati ───────────────────────────────────────────────────────────
 try:
     df, df_skill = carica_dati()
@@ -309,7 +322,6 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # Ricerca libera su titolo/azienda
     st.markdown('<div class="filtri-sezione">🔍 Ricerca libera</div>', unsafe_allow_html=True)
     testo_libero = st.text_input(
         "Cerca in titolo o azienda:",
@@ -318,7 +330,6 @@ with st.sidebar:
         key="testo_libero",
     )
 
-    # Periodo
     st.markdown('<div class="filtri-sezione">📅 Periodo</div>', unsafe_allow_html=True)
     periodo = st.selectbox(
         "Periodo",
@@ -328,7 +339,6 @@ with st.sidebar:
         help="L'ETL si aggiorna ogni mattina alle 08:00. 'Ultime 24 ore' mostra pochissimi risultati nelle ore serali.",
     )
 
-    # Seniority
     st.markdown('<div class="filtri-sezione">🎯 Livello esperienza</div>', unsafe_allow_html=True)
     seniority_sel = st.multiselect(
         "Livello",
@@ -339,7 +349,6 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # Modalità lavoro
     st.markdown('<div class="filtri-sezione">🏠 Modalità di lavoro</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="hint-pill">Remoto = 100% da casa · Ibrido = misto ufficio+casa</div>',
@@ -354,7 +363,6 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # Città — solo testo libero (FIX: rimossa la variabile citta_sel che creava conflitti)
     st.markdown('<div class="filtri-sezione">📍 Città</div>', unsafe_allow_html=True)
     citta_testo = st.text_input(
         "Cerca città:",
@@ -363,7 +371,6 @@ with st.sidebar:
         key="citta_testo",
     )
 
-    # Skill + AND/OR
     st.markdown('<div class="filtri-sezione">🔧 Skill richieste</div>', unsafe_allow_html=True)
     skill_options = []
     if not df_skill.empty and "skill" in df_skill.columns:
@@ -384,7 +391,6 @@ with st.sidebar:
     else:
         skill_mode = "Almeno una (OR)"
 
-    # Opzioni extra
     st.markdown('<div class="filtri-sezione">⚙️ Opzioni</div>', unsafe_allow_html=True)
     solo_url = st.checkbox("Solo offerte con link candidatura", value=False)
 
@@ -426,7 +432,7 @@ st.markdown("""
 if dati_ok:
     df_f = df.copy()
 
-    # Periodo
+    # Periodo — FIX v3.2: .notna() esclude i NaT che prima passavano il filtro >= 
     if col_safe(df_f, "data_pubblicazione"):
         oggi = pd.Timestamp.now(tz="UTC")
         mappa_periodo = {
@@ -436,7 +442,10 @@ if dati_ok:
             "Ultimi 90 giorni": pd.Timedelta(days=90),
         }
         if periodo in mappa_periodo:
-            df_f = df_f[df_f["data_pubblicazione"] >= oggi - mappa_periodo[periodo]]
+            df_f = df_f[
+                df_f["data_pubblicazione"].notna() &
+                (df_f["data_pubblicazione"] >= oggi - mappa_periodo[periodo])
+            ]
 
     # Seniority
     if seniority_sel:
@@ -446,7 +455,7 @@ if dati_ok:
     if modalita_sel:
         df_f = df_f[df_f["modalita_lavoro"].isin(modalita_sel)]
 
-    # Città — FIX: unico filtro testo, nessuna variabile citta_sel ridondante
+    # Città
     if citta_testo.strip() and col_safe(df_f, "città"):
         df_f = df_f[df_f["città"].str.contains(citta_testo.strip(), case=False, na=False)]
 
@@ -545,8 +554,6 @@ if n_offerte > 0:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── TABS per ruolo ─────────────────────────────────────────────────────────────
-# FIX: controlla tab attive su df (intero) non df_f (filtrato), così le tab non spariscono
-# quando si filtra. Mostra il conteggio filtrato nel label.
 def build_tab_label(nome: str, ruolo: str | None, df_filtrato: pd.DataFrame) -> str:
     if ruolo is None:
         n = len(df_filtrato)
@@ -563,12 +570,10 @@ for nome, ruolo in RUOLI.items():
     if ruolo is None:
         tab_attive[nome] = ruolo
         continue
-    # Mostra la tab se il ruolo esiste nel dataset COMPLETO (non filtrato)
     if dati_ok and col_safe(df, "categoria_ruolo"):
         if len(df[df["categoria_ruolo"] == ruolo]) > 0:
             tab_attive[nome] = ruolo
 
-# Costruisci label con conteggio offerte filtrate
 tab_labels = [build_tab_label(nome, ruolo, df_f) for nome, ruolo in tab_attive.items()]
 tabs = st.tabs(tab_labels)
 
@@ -750,24 +755,31 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             data_pub  = row.get("data_pubblicazione")
             categoria = row.get("categoria_ruolo") or ""
 
-            data_str  = data_pub.strftime("%d %b %Y") if pd.notna(data_pub) else "—"
+            # ── FIX v3.2: data pubblicazione leggibile e relativa ──────────────
+            data_label = format_data_pub(data_pub)
+            data_html = (
+                f'<span class="offerta-data">🗓 {data_label}</span>'
+                if data_label else ""
+            )
+
             link_html = (
                 f'<a href="{url}" target="_blank" '
                 f'style="color:#a78bfa; text-decoration:none; font-size:0.82rem; font-weight:500;">'
                 f'→ Candidati</a>'
                 if url else ""
             )
+
             st.markdown(
                 f'<div class="offerta-card">'
                 f'<div style="display:flex; justify-content:space-between; align-items:flex-start;">'
                 f'<div style="flex:1;">'
                 f'<div class="offerta-titolo">{titolo}</div>'
                 f'<div class="offerta-azienda">{azienda}</div>'
-                f'<div style="margin-top:0.6rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">'
+                f'<div style="margin-top:0.6rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">'
                 f'{badge_seniority(seniority)}'
                 f'{badge_modalita(modalita)}'
                 f'<span class="offerta-citta">📍 {citta_r}</span>'
-                f'<span style="font-family:JetBrains Mono; font-size:0.72rem; color:#3d3d5c;">{data_str}</span>'
+                f'{data_html}'
                 f'<span style="font-size:0.72rem; color:#4b5563;">{categoria}</span>'
                 f'</div>'
                 f'</div>'
