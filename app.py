@@ -170,7 +170,7 @@ def normalizza_seniority(val: str) -> str:
 @st.cache_data(ttl=3600)
 def carica_dati():
     supabase = get_supabase()
-    offerte_raw = supabase.table("offerte").select("*").execute().data
+    offerte_raw = supabase.table("offerte").select("*").eq("attiva", True).execute().data
     skill_raw   = supabase.table("skill_richieste").select("*").execute().data
 
     df       = pd.DataFrame(offerte_raw)
