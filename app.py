@@ -292,9 +292,6 @@ def filtri_hash(periodo, seniority_sel, modalita_sel, citta_key, skill_sel, skil
 try:
     df, df_skill = carica_dati()
     dati_ok = not df.empty
-    # DEBUG TEMPORANEO — rimuovi dopo
-    if dati_ok and "città" in df.columns:
-        st.write("🔍 DEBUG CITTÀ:", df["città"].value_counts().head(60).to_dict())
 except Exception as e:
     st.error(f"Errore connessione Supabase: {e}")
     dati_ok = False
@@ -448,7 +445,7 @@ if dati_ok:
 
     # Città: selectbox ha priorità; text fallback se selectbox = "Tutte"
     if citta_sel != "Tutte" and col_safe(df_f, "città"):
-        df_f = df_f[df_f["città"] == citta_sel]
+        df_f = df_f[df_f["città"].str.contains(citta_sel, case=False, na=False)]
     elif citta_testo.strip() and col_safe(df_f, "città"):
         df_f = df_f[df_f["città"].str.contains(citta_testo.strip(), case=False, na=False)]
 
