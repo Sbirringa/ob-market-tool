@@ -287,6 +287,21 @@ def fetch_offerte(query: str, num_pages: int) -> list[dict]:
 def carica_su_supabase(supabase: Client, offerte_processate: list[dict]):
     inserite = 0
     saltate  = 0
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Prendi tutti gli id_esterno trovati in questa run
+    id_esterni_run = {o["id_esterno"] for o in offerte_processate}
+
+    # Marca come non attive le offerte non trovate in questa run
+    try:
+        supabase.table("offerte").update({
+            "attiva": False,
+            "ultimo_check": now,
+        }).not_.in_("id_esterno", list(id_esterni_run)).execute()
+        print(f"  ✅ Offerte vecchie marcate come non attive")
+    except Exception as e:
+        print(f"  ⚠ Errore aggiornamento offerte vecchie: {e}")
+
     for offerta in offerte_processate:
         try:
             check = (
@@ -296,6 +311,11 @@ def carica_su_supabase(supabase: Client, offerte_processate: list[dict]):
                 .execute()
             )
             if check.data:
+                # Offerta già presente → aggiorna attiva=true e ultimo_check
+                supabase.table("offerte").update({
+                    "attiva": True,
+                    "ultimo_check": now,
+                }).eq("id_esterno", offerta["id_esterno"]).execute()
                 saltate += 1
                 continue
 
@@ -313,6 +333,8 @@ def carica_su_supabase(supabase: Client, offerte_processate: list[dict]):
                 "modalita_lavoro":   offerta["modalita_lavoro"],
                 "stipendio_min":     offerta.get("stipendio_min"),
                 "stipendio_max":     offerta.get("stipendio_max"),
+                "attiva":            True,
+                "ultimo_check":      now,
             }
 
             res = supabase.table("offerte").insert(record).execute()
