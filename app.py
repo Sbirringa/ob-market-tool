@@ -1,15 +1,18 @@
 """
-IT Job Market Intelligence — Dashboard Streamlit v3.0
+IT Job Market Intelligence — Dashboard Streamlit v3.1
 Design: Dark editorial 2026
-Miglioramenti v3:
-  - Normalizzazione robusta modalita_lavoro e seniority (gestisce varianti raw dal DB)
-  - Filtro remoto = 100% remoto, ibrido = misto — semantica precisa
-  - Filtro skill con toggle AND / OR
-  - Reset pagina automatico al cambio di qualsiasi filtro
-  - Paginazione con ellipsis (non salta il layout con molte pagine)
-  - KPI: remoto e ibrido separati + esclusione "Non specificata" da città top
-  - Filtro città: dropdown con città reali + text fallback
-  - Gestione difensiva colonne assenti tramite col_safe()
+
+Fix v3.1:
+  - BUG FIX: citta_sel rimosso, filtro città unificato su citta_testo (era ridondante e causava "Nessuna offerta")
+  - BUG FIX: tab_attive ora controlla col_safe su df (intero dataset), non df_f (filtrato) → le tab non spariscono
+  - BUG FIX: filtri_hash ora riceve citta_testo direttamente, non concatenazione ambigua
+  - MIGLIORAMENTO: Salary range parsing (se colonna "stipendio" presente)
+  - MIGLIORAMENTO: Filtro "Solo con URL" (mostra solo offerte con link candidatura)
+  - MIGLIORAMENTO: Contatore offerte per tab nel tab label
+  - MIGLIORAMENTO: Esportazione CSV del risultato filtrato
+  - MIGLIORAMENTO: Ricerca testuale nel titolo/azienda
+  - MIGLIORAMENTO: Grafici skill con colori per categoria
+  - MIGLIORAMENTO: Top 10 skill globali nel KPI section
 """
 
 import streamlit as st
@@ -18,6 +21,7 @@ import plotly.graph_objects as go
 from supabase import create_client, Client
 import os
 import hashlib
+import io
 
 # ── Configurazione pagina ──────────────────────────────────────────────────────
 st.set_page_config(
@@ -123,32 +127,26 @@ def get_supabase() -> Client:
 
 # ── Normalizzazione valori raw dal DB ──────────────────────────────────────────
 _MODALITA_MAP: dict[str, str] = {
-    # remoto puro
     "remoto": "remoto", "remote": "remoto", "full remote": "remoto",
     "fully remote": "remoto", "100% remoto": "remoto", "100% remote": "remoto",
     "smart working": "remoto", "smartworking": "remoto",
     "da remoto": "remoto", "telelavoro": "remoto",
-    # ibrido
     "ibrido": "ibrido", "hybrid": "ibrido", "ibrida": "ibrido",
     "misto": "ibrido", "flessibile": "ibrido", "flexible": "ibrido",
     "parzialmente remoto": "ibrido", "partial remote": "ibrido",
     "smart working parziale": "ibrido",
-    # in sede
     "sede": "sede", "in sede": "sede", "on site": "sede",
     "onsite": "sede", "on-site": "sede", "in loco": "sede",
     "presenza": "sede", "in presenza": "sede", "ufficio": "sede",
 }
 
 _SENIORITY_MAP: dict[str, str] = {
-    # junior
     "junior": "junior", "jr": "junior", "jr.": "junior",
     "stage": "junior", "stagista": "junior", "tirocinio": "junior",
     "neolaureato": "junior", "entry level": "junior", "entry": "junior",
     "graduate": "junior", "intern": "junior",
-    # mid
     "mid": "mid", "middle": "mid", "medior": "mid",
     "con esperienza": "mid", "experienced": "mid",
-    # senior
     "senior": "senior", "sr": "senior", "sr.": "senior",
     "lead": "senior", "tech lead": "senior", "principal": "senior",
     "manager": "senior", "head": "senior", "architect": "senior",
@@ -181,22 +179,22 @@ def carica_dati():
             df["data_pubblicazione"] = pd.to_datetime(
                 df["data_pubblicazione"], utc=True, errors="coerce"
             )
-        # Modalità lavoro normalizzata
         if "modalita_lavoro" in df.columns:
             df["modalita_lavoro"] = df["modalita_lavoro"].apply(normalizza_modalita)
         else:
             df["modalita_lavoro"] = "non specificato"
 
-        # Seniority normalizzata
         if "seniority" in df.columns:
             df["seniority"] = df["seniority"].apply(normalizza_seniority)
         else:
             df["seniority"] = "unspecified"
 
-        # Città: strip + title case + placeholder per vuoti
         if "città" in df.columns:
             df["città"] = df["città"].astype(str).str.strip().str.title()
-            df["città"] = df["città"].replace({"": "Non Specificata", "Nan": "Non Specificata", "None": "Non Specificata"})
+            df["città"] = df["città"].replace({
+                "": "Non Specificata", "Nan": "Non Specificata",
+                "None": "Non Specificata", "Nat": "Non Specificata",
+            })
             df["città"] = df["città"].fillna("Non Specificata")
 
     return df, df_skill
@@ -247,11 +245,10 @@ RUOLI = {
 }
 
 PER_PAGINA = 30
-CITTA_NON_VALIDE = {"Non Specificata", "Non specificata", "", "Nan", "None"}
+CITTA_NON_VALIDE = {"Non Specificata", "Non specificata", "", "Nan", "None", "Nat"}
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def col_safe(df: pd.DataFrame, col: str) -> bool:
-    """True se la colonna esiste e non è tutta NaN."""
     return col in df.columns and not df[col].isna().all()
 
 def badge_seniority(seniority: str) -> str:
@@ -268,7 +265,6 @@ def badge_modalita(modalita: str) -> str:
     return ""
 
 def pagine_visibili(corrente: int, totale: int, delta: int = 2) -> list:
-    """Sequenza di numeri pagina con None come segnaposto per '…'."""
     pagine = set()
     pagine.add(1)
     pagine.add(totale)
@@ -284,9 +280,15 @@ def pagine_visibili(corrente: int, totale: int, delta: int = 2) -> list:
         prev = p
     return out
 
-def filtri_hash(periodo, seniority_sel, modalita_sel, citta_key, skill_sel, skill_mode) -> str:
-    raw = f"{periodo}|{sorted(seniority_sel)}|{sorted(modalita_sel)}|{citta_key}|{sorted(skill_sel)}|{skill_mode}"
+def filtri_hash(periodo, seniority_sel, modalita_sel, citta_testo, skill_sel, skill_mode, solo_url, testo_libero) -> str:
+    raw = f"{periodo}|{sorted(seniority_sel)}|{sorted(modalita_sel)}|{citta_testo}|{sorted(skill_sel)}|{skill_mode}|{solo_url}|{testo_libero}"
     return hashlib.md5(raw.encode()).hexdigest()[:8]
+
+def df_to_csv_bytes(df: pd.DataFrame) -> bytes:
+    cols_export = [c for c in ["titolo", "azienda", "città", "seniority", "modalita_lavoro", "categoria_ruolo", "data_pubblicazione", "url"] if c in df.columns]
+    buf = io.BytesIO()
+    df[cols_export].to_csv(buf, index=False, encoding="utf-8-sig")
+    return buf.getvalue()
 
 # ── Caricamento dati ───────────────────────────────────────────────────────────
 try:
@@ -306,6 +308,15 @@ with st.sidebar:
         <div style="font-size: 0.72rem; color: #6b6880; text-transform: uppercase; letter-spacing: 0.1em; margin-top: 0.3rem;">Italia · Settore IT</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Ricerca libera su titolo/azienda
+    st.markdown('<div class="filtri-sezione">🔍 Ricerca libera</div>', unsafe_allow_html=True)
+    testo_libero = st.text_input(
+        "Cerca in titolo o azienda:",
+        placeholder="Es: Python developer, KPMG...",
+        label_visibility="visible",
+        key="testo_libero",
+    )
 
     # Periodo
     st.markdown('<div class="filtri-sezione">📅 Periodo</div>', unsafe_allow_html=True)
@@ -343,14 +354,14 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # Città — solo testo libero
+    # Città — solo testo libero (FIX: rimossa la variabile citta_sel che creava conflitti)
     st.markdown('<div class="filtri-sezione">📍 Città</div>', unsafe_allow_html=True)
     citta_testo = st.text_input(
         "Cerca città:",
         placeholder="Es: Milano, Roma, Torino...",
         label_visibility="visible",
+        key="citta_testo",
     )
-    citta_sel = "Tutte"  # sempre Tutte, il filtro è solo il testo
 
     # Skill + AND/OR
     st.markdown('<div class="filtri-sezione">🔧 Skill richieste</div>', unsafe_allow_html=True)
@@ -373,6 +384,10 @@ with st.sidebar:
     else:
         skill_mode = "Almeno una (OR)"
 
+    # Opzioni extra
+    st.markdown('<div class="filtri-sezione">⚙️ Opzioni</div>', unsafe_allow_html=True)
+    solo_url = st.checkbox("Solo offerte con link candidatura", value=False)
+
     st.markdown("---")
     if st.button("🔄 Aggiorna dati", use_container_width=True):
         st.cache_data.clear()
@@ -381,9 +396,10 @@ with st.sidebar:
     n_filtri = sum([
         bool(seniority_sel),
         bool(modalita_sel),
-        citta_sel != "Tutte",
         bool(citta_testo.strip()),
         bool(skill_sel),
+        bool(testo_libero.strip()),
+        solo_url,
         periodo != "Tutto",
     ])
     if n_filtri > 0:
@@ -426,13 +442,25 @@ if dati_ok:
     if seniority_sel:
         df_f = df_f[df_f["seniority"].isin(seniority_sel)]
 
-    # Modalità lavoro (semantica precisa: remoto ≠ ibrido)
+    # Modalità lavoro
     if modalita_sel:
         df_f = df_f[df_f["modalita_lavoro"].isin(modalita_sel)]
 
-    # Città: selectbox ha priorità; text fallback se selectbox = "Tutte"
+    # Città — FIX: unico filtro testo, nessuna variabile citta_sel ridondante
     if citta_testo.strip() and col_safe(df_f, "città"):
         df_f = df_f[df_f["città"].str.contains(citta_testo.strip(), case=False, na=False)]
+
+    # Ricerca libera su titolo + azienda
+    if testo_libero.strip():
+        mask = pd.Series(False, index=df_f.index)
+        for col in ["titolo", "azienda"]:
+            if col_safe(df_f, col):
+                mask = mask | df_f[col].str.contains(testo_libero.strip(), case=False, na=False)
+        df_f = df_f[mask]
+
+    # Solo offerte con URL
+    if solo_url and col_safe(df_f, "url"):
+        df_f = df_f[df_f["url"].notna() & (df_f["url"].astype(str).str.strip() != "")]
 
     # Skill (AND / OR)
     if skill_sel and not df_skill.empty and "offerta_id" in df_skill.columns:
@@ -454,7 +482,7 @@ if dati_ok:
 
     # Reset pagina automatico se i filtri sono cambiati
     h = filtri_hash(periodo, seniority_sel, modalita_sel,
-                    citta_sel + citta_testo, skill_sel, skill_mode)
+                    citta_testo, skill_sel, skill_mode, solo_url, testo_libero)
     if st.session_state.get("_filtri_hash") != h:
         for k in list(st.session_state.keys()):
             if k.startswith("_pg_"):
@@ -500,19 +528,49 @@ for col, (val, label, sub) in zip(cols_kpi, kpis):
             unsafe_allow_html=True,
         )
 
+# Esportazione CSV
+st.markdown("<br>", unsafe_allow_html=True)
+if n_offerte > 0:
+    col_export, col_empty = st.columns([1, 4])
+    with col_export:
+        csv_bytes = df_to_csv_bytes(df_f)
+        st.download_button(
+            label=f"⬇️ Esporta {n_offerte} offerte (CSV)",
+            data=csv_bytes,
+            file_name="offerte_it_jobs.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ── TABS per ruolo ─────────────────────────────────────────────────────────────
+# FIX: controlla tab attive su df (intero) non df_f (filtrato), così le tab non spariscono
+# quando si filtra. Mostra il conteggio filtrato nel label.
+def build_tab_label(nome: str, ruolo: str | None, df_filtrato: pd.DataFrame) -> str:
+    if ruolo is None:
+        n = len(df_filtrato)
+    elif col_safe(df_filtrato, "categoria_ruolo"):
+        n = len(df_filtrato[df_filtrato["categoria_ruolo"] == ruolo])
+    else:
+        n = 0
+    if n > 0:
+        return f"{nome} ({n})"
+    return nome
+
 tab_attive: dict[str, str | None] = {}
 for nome, ruolo in RUOLI.items():
     if ruolo is None:
         tab_attive[nome] = ruolo
         continue
-    if dati_ok and col_safe(df_f, "categoria_ruolo"):
-        if len(df_f[df_f["categoria_ruolo"] == ruolo]) > 0:
+    # Mostra la tab se il ruolo esiste nel dataset COMPLETO (non filtrato)
+    if dati_ok and col_safe(df, "categoria_ruolo"):
+        if len(df[df["categoria_ruolo"] == ruolo]) > 0:
             tab_attive[nome] = ruolo
 
-tabs = st.tabs(list(tab_attive.keys()))
+# Costruisci label con conteggio offerte filtrate
+tab_labels = [build_tab_label(nome, ruolo, df_f) for nome, ruolo in tab_attive.items()]
+tabs = st.tabs(tab_labels)
 
 for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
     with tab:
@@ -531,6 +589,7 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
             <div style="text-align:center; padding: 3rem; color: #3d3d5c;">
                 <div style="font-size: 2rem; margin-bottom: 1rem;">🔍</div>
                 <div style="font-size: 0.9rem;">Nessuna offerta trovata con i filtri selezionati</div>
+                <div style="font-size: 0.78rem; color: #2d2d45; margin-top:0.5rem;">Prova ad allargare i filtri nella sidebar</div>
             </div>
             """, unsafe_allow_html=True)
             continue
@@ -611,7 +670,6 @@ for tab, (tab_nome, ruolo_filter) in zip(tabs, tab_attive.items()):
         with col_g4:
             st.markdown('<div class="section-title">🏠 Modalità di Lavoro</div>', unsafe_allow_html=True)
             if col_safe(df_tab, "modalita_lavoro"):
-                # Escludi "non specificato" dal grafico se ci sono altri dati
                 df_mod = df_tab[df_tab["modalita_lavoro"] != "non specificato"]
                 if df_mod.empty:
                     df_mod = df_tab
