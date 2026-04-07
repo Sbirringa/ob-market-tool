@@ -1,13 +1,15 @@
 """
-ETL — Job Market Intelligence Tool v2.1 (FIXED)
+ETL — Job Market Intelligence Tool v2.2
 Estrae offerte IT da JSearch API, le trasforma e le carica su Supabase.
 
 Fix v2.1:
 - BUG FIX CRITICO: raccoglie TUTTE le offerte da TUTTE le query prima di caricare
-  (prima: disattivava le offerte categoria per categoria durante il loop → disattivava tutto)
 - BUG FIX: disattiva solo le offerte non viste da più di 7 giorni (soglia configurabile)
-  (prima: disattivava tutto ciò che non era nella run corrente, anche se la run era incompleta)
 - MIGLIORAMENTO: se la run è incompleta (limite API), le offerte recenti rimangono attive
+
+Fix v2.2:
+- BUG FIX: data_pubblicazione ora usa ultimo_check come fallback se JSearch restituisce null
+  (prima: null → il filtro "Ultime 24 ore" in app.py includeva tutte le offerte con NaT)
 - INVARIATO: tutte le query, skill, normalizzazioni, seniority detection
 """
 
@@ -390,7 +392,7 @@ def carica_su_supabase(supabase: Client, tutte_le_offerte: list[dict]):
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print(f"ETL v2.1 — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"ETL v2.2 — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print("=" * 60)
 
     if not all([SUPABASE_URL, SUPABASE_KEY, RAPIDAPI_KEY]):
@@ -431,7 +433,7 @@ def main():
                     "citta":              normalizza_citta(job.get("job_city", "") or ""),
                     "descrizione":        descrizione,
                     "url":                job.get("job_apply_link", ""),
-                    "data_pubblicazione": job.get("job_posted_at_datetime_utc"),
+                    "data_pubblicazione": job.get("job_posted_at_datetime_utc") or datetime.now(timezone.utc).isoformat(),
                     "categoria_ruolo":    q["categoria"],
                     "seniority":          rileva_seniority(titolo, descrizione, exp),
                     "modalita_lavoro":    rileva_modalita_lavoro(titolo, descrizione),
