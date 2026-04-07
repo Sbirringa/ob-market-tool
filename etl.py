@@ -198,6 +198,17 @@ CITTA_MAP = {
     "pisa": "Pisa", "siena": "Siena", "lucca": "Lucca",
     "italy": "Italia", "italia": "Italia",
     "remote": "Remoto", "remoto": "Remoto",
+    # Varianti Milano che JSearch restituisce
+    "milan": "Milano", "milan (mi)": "Milano", "milano (mi)": "Milano",
+    "greater milan": "Milano", "milano, mi": "Milano",
+    "provincia di milano": "Milano",
+    "milan, metropolitan city of milan": "Milano",
+    "metropolitan city of milan": "Milano",
+    # Varianti Roma
+    "rome, lazio": "Roma", "greater rome": "Roma",
+    "city of rome": "Roma",
+    # Varianti generiche Italia
+    "italy": "Non Specificata", "italia": "Non Specificata",
 }
 
 def normalizza_citta(citta_raw: str) -> str:
