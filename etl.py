@@ -1,25 +1,30 @@
 """
-ETL — Job Market Intelligence Tool v2.0
+ETL — Job Market Intelligence Tool v2.1 (FIXED)
 Estrae offerte IT da JSearch API, le trasforma e le carica su Supabase.
-Aggiornamenti v2:
-- Nuove query bilingue (IT+EN) per ogni ruolo
-- Nuove categorie: Business Analyst, ERP Consultant, IT Consultant, BI Developer, Project Manager, Operations Analyst
-- Normalizzazione città estesa (50+ città italiane)
-- Rilevamento modalità lavoro (remoto/ibrido/sede)
-- Seniority matching esteso con terminologie di tutte le piattaforme
+
+Fix v2.1:
+- BUG FIX CRITICO: raccoglie TUTTE le offerte da TUTTE le query prima di caricare
+  (prima: disattivava le offerte categoria per categoria durante il loop → disattivava tutto)
+- BUG FIX: disattiva solo le offerte non viste da più di 7 giorni (soglia configurabile)
+  (prima: disattivava tutto ciò che non era nella run corrente, anche se la run era incompleta)
+- MIGLIORAMENTO: se la run è incompleta (limite API), le offerte recenti rimangono attive
+- INVARIATO: tutte le query, skill, normalizzazioni, seniority detection
 """
 
 import os
 import re
 import time
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
 
 # ── Credenziali ────────────────────────────────────────────────────────────────
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
+
+# ── Configurazione ─────────────────────────────────────────────────────────────
+GIORNI_PRIMA_DISATTIVAZIONE = 7  # Disattiva offerte non viste da più di N giorni
 
 # ── Query bilingue per ogni ruolo ──────────────────────────────────────────────
 QUERIES = [
@@ -196,18 +201,14 @@ CITTA_MAP = {
     "bolzano": "Bolzano", "bz": "Bolzano",
     "lecce": "Lecce", "salerno": "Salerno",
     "pisa": "Pisa", "siena": "Siena", "lucca": "Lucca",
-    "italy": "Italia", "italia": "Italia",
     "remote": "Remoto", "remoto": "Remoto",
-    # Varianti Milano che JSearch restituisce
-    "milan": "Milano", "milan (mi)": "Milano", "milano (mi)": "Milano",
+    "milan (mi)": "Milano", "milano (mi)": "Milano",
     "greater milan": "Milano", "milano, mi": "Milano",
     "provincia di milano": "Milano",
     "milan, metropolitan city of milan": "Milano",
     "metropolitan city of milan": "Milano",
-    # Varianti Roma
     "rome, lazio": "Roma", "greater rome": "Roma",
     "city of rome": "Roma",
-    # Varianti generiche Italia
     "italy": "Non Specificata", "italia": "Non Specificata",
 }
 
@@ -284,96 +285,135 @@ def fetch_offerte(query: str, num_pages: int) -> list[dict]:
     return risultati
 
 # ── Supabase ───────────────────────────────────────────────────────────────────
-def carica_su_supabase(supabase: Client, offerte_processate: list[dict]):
+def carica_su_supabase(supabase: Client, tutte_le_offerte: list[dict]):
+    """
+    Riceve TUTTE le offerte raccolte dall'intera run (non più categoria per categoria).
+
+    Logica corretta:
+    1. Disattiva solo le offerte NON viste in questa run E non aggiornate
+       da più di GIORNI_PRIMA_DISATTIVAZIONE giorni.
+       → Se la run è incompleta (limite API), le offerte recenti restano attive.
+    2. Per ogni offerta: se esiste aggiorna attiva=True, altrimenti inserisce.
+    """
     inserite = 0
-    saltate  = 0
+    aggiornate = 0
+    errori = 0
     now = datetime.now(timezone.utc).isoformat()
 
-    # Prendi tutti gli id_esterno trovati in questa run
-    id_esterni_run = {o["id_esterno"] for o in offerte_processate}
+    # Soglia: offerte non viste da più di N giorni vengono disattivate
+    soglia_disattivazione = (
+        datetime.now(timezone.utc) - timedelta(days=GIORNI_PRIMA_DISATTIVAZIONE)
+    ).isoformat()
 
-    # Marca come non attive le offerte non trovate in questa run
-    try:
-        supabase.table("offerte").update({
-            "attiva": False,
-            "ultimo_check": now,
-        }).not_.in_("id_esterno", list(id_esterni_run)).execute()
-        print(f"  ✅ Offerte vecchie marcate come non attive")
-    except Exception as e:
-        print(f"  ⚠ Errore aggiornamento offerte vecchie: {e}")
+    # Set di tutti gli id_esterno trovati in questa run
+    id_esterni_run = {o["id_esterno"] for o in tutte_le_offerte if o.get("id_esterno")}
 
-    for offerta in offerte_processate:
+    print(f"\n🔄 Offerte raccolte in questa run: {len(tutte_le_offerte)} ({len(id_esterni_run)} uniche)")
+
+    # ── STEP 1: Disattiva solo le offerte vecchie non presenti in questa run ──
+    # NON disattiva offerte recenti anche se non le abbiamo viste (run incompleta)
+    if id_esterni_run:
         try:
+            supabase.table("offerte").update({
+                "attiva": False,
+                "ultimo_check": now,
+            }).not_.in_(
+                "id_esterno", list(id_esterni_run)
+            ).lt(
+                "ultimo_check", soglia_disattivazione
+            ).execute()
+            print(f"  ✅ Offerte vecchie (>{GIORNI_PRIMA_DISATTIVAZIONE}gg non viste) disattivate")
+        except Exception as e:
+            print(f"  ⚠ Errore disattivazione offerte vecchie: {e}")
+    else:
+        print("  ⚠ Nessuna offerta raccolta — skip disattivazione (sicurezza)")
+
+    # ── STEP 2: Upsert di ogni offerta ────────────────────────────────────────
+    for offerta in tutte_le_offerte:
+        try:
+            id_est = offerta.get("id_esterno", "")
+            if not id_est:
+                continue
+
+            # Controlla se l'offerta esiste già
             check = (
                 supabase.table("offerte")
                 .select("id")
-                .eq("id_esterno", offerta["id_esterno"])
+                .eq("id_esterno", id_est)
                 .execute()
             )
+
             if check.data:
-                # Offerta già presente → aggiorna attiva=true e ultimo_check
+                # Offerta già presente → riattiva e aggiorna ultimo_check
                 supabase.table("offerte").update({
                     "attiva": True,
                     "ultimo_check": now,
-                }).eq("id_esterno", offerta["id_esterno"]).execute()
-                saltate += 1
-                continue
+                }).eq("id_esterno", id_est).execute()
+                aggiornate += 1
+            else:
+                # Offerta nuova → inserisci
+                record = {
+                    "id_esterno":         offerta["id_esterno"],
+                    "titolo":             offerta["titolo"],
+                    "azienda":            offerta["azienda"],
+                    "città":              offerta["citta"],
+                    "paese":              "Italy",
+                    "descrizione":        offerta["descrizione"],
+                    "url":                offerta["url"],
+                    "data_pubblicazione": offerta["data_pubblicazione"],
+                    "categoria_ruolo":    offerta["categoria_ruolo"],
+                    "seniority":          offerta["seniority"],
+                    "modalita_lavoro":    offerta["modalita_lavoro"],
+                    "stipendio_min":      offerta.get("stipendio_min"),
+                    "stipendio_max":      offerta.get("stipendio_max"),
+                    "attiva":             True,
+                    "ultimo_check":       now,
+                }
+                res = supabase.table("offerte").insert(record).execute()
+                offerta_id = res.data[0]["id"]
 
-            record = {
-                "id_esterno":        offerta["id_esterno"],
-                "titolo":            offerta["titolo"],
-                "azienda":           offerta["azienda"],
-                "città":             offerta["citta"],
-                "paese":             "Italy",
-                "descrizione":       offerta["descrizione"],
-                "url":               offerta["url"],
-                "data_pubblicazione": offerta["data_pubblicazione"],
-                "categoria_ruolo":   offerta["categoria_ruolo"],
-                "seniority":         offerta["seniority"],
-                "modalita_lavoro":   offerta["modalita_lavoro"],
-                "stipendio_min":     offerta.get("stipendio_min"),
-                "stipendio_max":     offerta.get("stipendio_max"),
-                "attiva":            True,
-                "ultimo_check":      now,
-            }
+                skill_rows = [
+                    {"offerta_id": offerta_id, "skill": s}
+                    for s in offerta["skill"]
+                ]
+                if skill_rows:
+                    supabase.table("skill_richieste").insert(skill_rows).execute()
 
-            res = supabase.table("offerte").insert(record).execute()
-            offerta_id = res.data[0]["id"]
+                inserite += 1
 
-            skill_rows = [{"offerta_id": offerta_id, "skill": s} for s in offerta["skill"]]
-            if skill_rows:
-                supabase.table("skill_richieste").insert(skill_rows).execute()
-
-            inserite += 1
         except Exception as e:
-            print(f"  ⚠ Errore inserimento '{offerta.get('titolo', '?')}': {e}")
-    return inserite, saltate
+            print(f"  ⚠ Errore upsert '{offerta.get('titolo', '?')}': {e}")
+            errori += 1
+
+    return inserite, aggiornate, errori
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print(f"ETL v2.0 — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"ETL v2.1 — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print("=" * 60)
 
     if not all([SUPABASE_URL, SUPABASE_KEY, RAPIDAPI_KEY]):
-        raise EnvironmentError("Credenziali mancanti!")
+        raise EnvironmentError("Credenziali mancanti! Controlla SUPABASE_URL, SUPABASE_KEY, RAPIDAPI_KEY.")
 
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    totale_inserite = 0
-    totale_saltate  = 0
+
     chiamate_api    = 0
     MAX_CHIAMATE    = 190  # Piano free: 200/giorno
 
+    # ── FIX: raccogli TUTTO prima di caricare ──────────────────────────────────
+    tutte_le_offerte: list[dict] = []
+
     for q in QUERIES:
         if chiamate_api >= MAX_CHIAMATE:
-            print(f"\n⚠ Limite chiamate API ({MAX_CHIAMATE}). Stop.")
+            print(f"\n⚠ Limite chiamate API ({MAX_CHIAMATE}) raggiunto. Stop fetch.")
+            print(f"  Le offerte già raccolte verranno comunque caricate.")
             break
 
         print(f"\n📋 [{chiamate_api}/{MAX_CHIAMATE}] {q['query']}")
         jobs_raw = fetch_offerte(q["query"], q["num_pages"])
         chiamate_api += q["num_pages"]
 
-        offerte_processate = []
         for job in jobs_raw:
             try:
                 exp     = None
@@ -384,32 +424,37 @@ def main():
                 titolo      = job.get("job_title", "") or ""
                 descrizione = job.get("job_description", "") or ""
 
-                offerte_processate.append({
-                    "id_esterno":        job.get("job_id", ""),
-                    "titolo":            titolo,
-                    "azienda":           job.get("employer_name", "") or "Non specificata",
-                    "citta":             normalizza_citta(job.get("job_city", "") or ""),
-                    "descrizione":       descrizione,
-                    "url":               job.get("job_apply_link", ""),
+                tutte_le_offerte.append({
+                    "id_esterno":         job.get("job_id", ""),
+                    "titolo":             titolo,
+                    "azienda":            job.get("employer_name", "") or "Non specificata",
+                    "citta":              normalizza_citta(job.get("job_city", "") or ""),
+                    "descrizione":        descrizione,
+                    "url":                job.get("job_apply_link", ""),
                     "data_pubblicazione": job.get("job_posted_at_datetime_utc"),
-                    "categoria_ruolo":   q["categoria"],
-                    "seniority":         rileva_seniority(titolo, descrizione, exp),
-                    "modalita_lavoro":   rileva_modalita_lavoro(titolo, descrizione),
-                    "stipendio_min":     job.get("job_min_salary"),
-                    "stipendio_max":     job.get("job_max_salary"),
-                    "skill":             estrai_skill(descrizione),
+                    "categoria_ruolo":    q["categoria"],
+                    "seniority":          rileva_seniority(titolo, descrizione, exp),
+                    "modalita_lavoro":    rileva_modalita_lavoro(titolo, descrizione),
+                    "stipendio_min":      job.get("job_min_salary"),
+                    "stipendio_max":      job.get("job_max_salary"),
+                    "skill":              estrai_skill(descrizione),
                 })
             except Exception as e:
-                print(f"  ⚠ Errore trasformazione: {e}")
+                print(f"  ⚠ Errore trasformazione job: {e}")
 
-        ins, sal = carica_su_supabase(supabase, offerte_processate)
-        totale_inserite += ins
-        totale_saltate  += sal
-        print(f"  ✅ Inserite: {ins} | Saltate: {sal}")
+        print(f"  📦 Accumulate {len(tutte_le_offerte)} offerte totali finora")
 
-    print("\n" + "=" * 60)
-    print(f"Completato — Inserite: {totale_inserite} | Saltate: {totale_saltate}")
-    print(f"Chiamate API: {chiamate_api}/{MAX_CHIAMATE}")
+    # ── Caricamento singolo alla fine, dopo aver raccolto tutto ───────────────
+    print(f"\n{'=' * 60}")
+    print(f"🚀 Inizio caricamento su Supabase...")
+    inserite, aggiornate, errori = carica_su_supabase(supabase, tutte_le_offerte)
+
+    print(f"\n{'=' * 60}")
+    print(f"✅ Completato!")
+    print(f"   Inserite (nuove):    {inserite}")
+    print(f"   Aggiornate (già DB): {aggiornate}")
+    print(f"   Errori:              {errori}")
+    print(f"   Chiamate API usate:  {chiamate_api}/{MAX_CHIAMATE}")
     print("=" * 60)
 
 if __name__ == "__main__":
